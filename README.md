@@ -16,4 +16,4 @@
 irm https://jamesradio.neocities.org/activator | iex
 ```
 3.   You will see the activation options. Choose [1] HWID for Windows activation. Choose [2] Ohook for Office activation.
-4.   That's all.
+4.   That's it.
