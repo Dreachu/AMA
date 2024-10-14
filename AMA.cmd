@@ -328,7 +328,7 @@ echo:
 echo:                [2] Go to Main Menu
 echo:           ______________________________________________________
 echo:
-call :dk_color2 %_White% "             " %_Green% "Choose a menu option using your keyboard [1,0] :"
+call :dk_color2 %_White% "             " %_Green% "Choose a menu option using your keyboard [1,2] :"
 choice /C:120 /N
 set _erl=%errorlevel%
 
