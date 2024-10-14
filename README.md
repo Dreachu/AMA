@@ -6,7 +6,7 @@
 
 <hr>
   
-## Download / How to use it?
+## How to use it?
 
 ### Method 1 - PowerShell (Windows 8 and later) ❤️
 
