@@ -2860,6 +2860,106 @@ exit /b
 
 ::========================================================================================================================================
 
+:k_uninstall
+
+cls
+if not defined terminal mode 99, 28
+title  Remove KMS38 Protection %masver%
+
+%nul% reg delete "HKLM\%specific_kms%" /f
+%nul% reg delete "HKU\S-1-5-20\%specific_kms%" /f
+
+%nul% reg query "HKLM\%specific_kms%" && (
+%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':regdel\:.*';iex ($f[1])"
+%nul% reg delete "HKLM\%specific_kms%" /f
+)
+
+echo:
+%nul% reg query "HKLM\%specific_kms%" && (
+call :dk_color %Red% "Removing Specific KMS Host              [Failed]"
+) || (
+echo Removing Specific KMS Host              [Successful]
+)
+
+goto :dk_done
+
+::========================================================================================================================================
+
+::  Check KMS activation status
+
+:k_actinfo
+
+set xpr=
+for /f "tokens=* delims=" %%# in ('%psc% "$([DateTime]::Now.addMinutes(%gpr%)).ToString('yyyy-MM-dd HH:mm:ss')" %nul6%') do set "xpr=%%#"
+call :dk_color %Green% "%winos% is activated till !xpr!"
+exit /b
+
+::  Check remaining KMS activation grace period
+
+:k_checkexp
+
+set gpr=0
+if %_wmic% EQU 1 for /f "tokens=2 delims==" %%# in ('"wmic path %spp% where (ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' and Description like '%%KMSCLIENT%%' and PartialProductKey is not NULL AND LicenseDependsOn is NULL) get GracePeriodRemaining /VALUE" %nul6%') do set "gpr=%%#"
+if %_wmic% EQU 0 for /f "tokens=2 delims==" %%# in ('%psc% "(([WMISEARCHER]'SELECT GracePeriodRemaining FROM %spp% WHERE ApplicationID=''55c92734-d682-4d71-983e-d6ec3f16059f'' AND Description like ''%%KMSCLIENT%%'' AND PartialProductKey IS NOT NULL AND LicenseDependsOn is NULL').Get()).GracePeriodRemaining | %% {echo ('GracePeriodRemaining='+$_)}" %nul6%') do set "gpr=%%#"
+if %gpr% GTR 259200 (set _k38=1) else (set _k38=)
+exit /b
+
+::  Get Windows installed key channel
+
+:k_channel
+
+set _gvlk=
+if %_wmic% EQU 1 for /f "tokens=2 delims==" %%# in ('wmic path %spp% where "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' and PartialProductKey IS NOT NULL AND LicenseDependsOn is NULL and Description like '%%KMSCLIENT%%'" Get Name /value %nul6%') do (echo %%# findstr /i "Windows" %nul1% && set _gvlk=1)
+if %_wmic% EQU 0 for /f "tokens=2 delims==" %%# in ('%psc% "(([WMISEARCHER]'SELECT Name FROM %spp% WHERE ApplicationID=''55c92734-d682-4d71-983e-d6ec3f16059f'' AND PartialProductKey IS NOT NULL AND LicenseDependsOn is NULL and Description like ''%%KMSCLIENT%%''').Get()).Name | %% {echo ('Name='+$_)}" %nul6%') do (echo %%# findstr /i "Windows" %nul1% && set _gvlk=1)
+exit /b
+
+::========================================================================================================================================
+
+::  Get Product Key from pkeyhelper.dll for future new editions
+::  It works on Windows 10 1803 (17134) and later builds.
+
+:k_pkey
+
+call :dk_reflection
+
+set d1=%ref% [void]$TypeBuilder.DefinePInvokeMethod('SkuGetProductKeyForEdition', 'pkeyhelper.dll', 'Public, Static', 1, [int], @([int], [String], [String].MakeByRefType(), [String].MakeByRefType()), 1, 3);
+set d1=%d1% $out = ''; [void]$TypeBuilder.CreateType()::SkuGetProductKeyForEdition(%1, %2, [ref]$out, [ref]$null); $out
+
+set pkey=
+for /f %%a in ('%psc% "%d1%"') do if not errorlevel 1 (set pkey=%%a)
+exit /b
+
+::  Get channel name for the key which was extracted from pkeyhelper.dll
+
+:k_pkeychannel
+
+set k=%1
+set m=[Runtime.InteropServices.Marshal]
+set p=%SysPath%\spp\tokens\pkeyconfig\pkeyconfig.xrm-ms
+
+set d1=%ref% [void]$TypeBuilder.DefinePInvokeMethod('PidGenX', 'pidgenx.dll', 'Public, Static', 1, [int], @([String], [String], [String], [int], [IntPtr], [IntPtr], [IntPtr]), 1, 3);
+set d1=%d1% $r = [byte[]]::new(0x04F8); $r[0] = 0xF8; $r[1] = 0x04; $f = %m%::AllocHGlobal(0x04F8); %m%::Copy($r, 0, $f, 0x04F8);
+set d1=%d1% [void]$TypeBuilder.CreateType()::PidGenX('%k%', '%p%', '00000', 0, 0, 0, $f); %m%::Copy($f, $r, 0, 0x04F8); %m%::FreeHGlobal($f); [Text.Encoding]::Unicode.GetString($r, 1016, 128)
+
+set pkeychannel=
+for /f %%a in ('%psc% "%d1%"') do if not errorlevel 1 (set pkeychannel=%%a)
+exit /b
+
+:k_gvlk
+
+for %%# in (pkeyhelper.dll) do @if "%%~$PATH:#"=="" exit /b
+for %%# in (Volume:GVLK) do (
+call :k_pkey %osSKU% '%%#'
+if defined pkey call :k_pkeychannel !pkey!
+if /i "!pkeychannel!"=="%%#" (
+set key=!pkey!
+exit /b
+)
+)
+exit /b
+
+::========================================================================================================================================
+
 ::  1st column = Office version number
 ::  2nd column = Activation ID
 ::  3rd column = Generic key. Preference is given in this order, Retail:TB:Sub > Retail > OEM:NONSLP > Volume:MAK > Volume:GVLK
